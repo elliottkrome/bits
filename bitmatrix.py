@@ -100,7 +100,8 @@ class BitMatrix:
     def __sub__(self, y):
         pass
     def __mul__(self, y):
-        # print "mul:", self
+        if self.n() != y.m():
+            raise ValueError
         if isinstance(y, BitVector):
             val = 0
             for row_number in range(self._m):
