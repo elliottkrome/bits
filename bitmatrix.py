@@ -14,7 +14,8 @@ TODO
 class BitMatrix:
     def __init__(self,
                  columns_a,
-                 m_a=None):
+                 m_a=None,
+                 msb_top_a=False):
 
         if m_a is not None:
             self._m = m_a
@@ -22,6 +23,7 @@ class BitMatrix:
             largest_value = max(columns_a)
             self._m = largest_value.bit_length()
 
+        self._msb_on_top = msb_top_a
         self._n = len(columns_a)
         
         # list of column vectors
@@ -36,7 +38,9 @@ class BitMatrix:
                     if column < 0:
                         raise ValueError
                     self._columns.insert(len(self._columns),
-                                        BitVector(column, self._m))
+                                        BitVector(column, 
+                                                  self._m,
+                                                  self._msb_on_top))
             elif isinstance(columns_a[0], BitVector):
                 self._columns = columns_a
 
@@ -52,8 +56,12 @@ class BitMatrix:
         val = 0
         for j in range(self._n):
             bit_at_row_i_column_j = self._columns[j][i]
-            val = val + (bit_at_row_i_column_j << j)
-        return BitVector(val, self._n)
+            if self._msb_on_top:
+                power = self._n - j - 1
+            else:
+                power = j
+            val = val + (bit_at_row_i_column_j << power)
+        return BitVector(val, self._n, self._msb_on_top)
 
     def __repr__(self):
         values = [str(col._value) for col in self._columns]
@@ -85,25 +93,27 @@ class BitMatrix:
         cols = []
         for i in range(self._m):
             cols.insert(len(cols), self[i])
-        return BitMatrix(cols, self._n)
+        return BitMatrix(cols, self._n, self._msb_on_top)
 
     def __add__(self, y):
         pass
     def __sub__(self, y):
         pass
     def __mul__(self, y):
+        # print "mul:", self
         if isinstance(y, BitVector):
             val = 0
             for row_number in range(self._m):
+                if self._msb_on_top: 
+                    row_number = self._m - row_number - 1
                 row_product = self[row_number] * y
-                val = val + (row_product._value << row_number) % 2
-            return BitVector(val, self._m)
+                val = val + (row_product << row_number)
+            return BitVector(val, self._m, self._msb_on_top)
         elif isinstance(y, BitMatrix):
             output_col_list = []
             for col_number in range(y._n):
-                print self * y.column(col_number)
                 output_col_list.insert(len(output_col_list),
                                        self * y.column(col_number))
-            return BitMatrix(output_col_list, self._m)
+            return BitMatrix(output_col_list, self._m, self._msb_on_top)
         else:
             raise ValueError

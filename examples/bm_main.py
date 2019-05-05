@@ -1,19 +1,21 @@
-from bitmatrix import BitMatrix
-from bitvector import BitVector
+from bits import BitMatrix
+from bits import BitVector
 
 if __name__ == "__main__":
-    cols = [1, 2, 3, 4, 5, 6, 7]
-    H = BitMatrix(cols)
+    cols = [11, 14, 7, 8, 4, 2, 1]
+    m = 4 # 3 bits per column
+    msb_on_top = True
 
-    H.print_bits()
-    H.transpose().print_bits()
+    C = BitMatrix(cols, m, msb_on_top)
+    print "C:"
+    C.print_bits()
 
-    x = BitVector(3, H.n())
-    Hx = H * x
-    Hx.print_bits()
+    x = BitMatrix([3, 13], m, msb_on_top).transpose()
+    print "x:", x
+    print x, C
+    xC = x * C
+    print "xC:", xC
+    xC.print_bits()
 
-    HtH = H * H.transpose()
-    HtH.print_bits()
-
-    print H
-    print HtH
+    print "C':"
+    C.transpose().print_bits()

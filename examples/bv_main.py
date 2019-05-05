@@ -1,4 +1,4 @@
-from bitvector import BitVector, flip_n_bits
+from bits import BitVector, flip_n_bits
 
 if __name__ == "__main__":
     nbits = 10
