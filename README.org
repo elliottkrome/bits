@@ -1,0 +1,4 @@
+* What is this?
+These are some little helper classes to experiment in Galois Fields of 2^m. These fields are very common in channel coding, among other useful areas. I made them to help me learn about / experiment with FEC (forward error correction).
+
+I like to work on personal projects via a literate programming paradigm making use of ~*.org~ files and "tangling". All the code and all of the examples can be found by perusing ~bits.org~. There actually aren't a lot of notes in there - it is mostly just code.

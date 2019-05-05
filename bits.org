@@ -1,0 +1,284 @@
+
+* __init__.py
+:PROPERTIES:
+:header-args: :tangle __init__.py
+:END:
+#+begin_src python
+#+end_src
+* BitVector
+:PROPERTIES:
+:header-args: :tangle bitvector.py
+:END:
+** imports, __init__, getters
+#+begin_src python 
+from random import randint  # for bit-flipping
+
+class BitVector:
+    def __init__(self,
+                 value_a,
+                 size_in_bits_a):
+        if isinstance(value_a, list):
+            raise NotImplementedError
+        elif isinstance(value_a, str):
+            if value_a[0] == '0':
+                if value_a[1] == 'x':
+                    self._value = int(value_a, 16)
+                elif value_a[1] == 'b':
+                    self._value = int(value_a, 2)
+                else:
+                    self._value = int(value_a, 16)
+            # if string w/out 0x* prefix, assume hex string by default
+            else:
+                self._value = int(value_a, 16)
+        elif isinstance(value_a, int):
+            self._value = value_a
+        else:
+            raise NotImplementedError
+    
+        self._m = size_in_bits_a
+        # self._max_val_d = int("0b" + "1" * self._m, 2)
+        self._max_val_d = pow(2, self._m) - 1
+        # self._value = self._value % self._max_val_d
+        if self._value > self._max_val_d:
+            print "value " + str(self._value) + \
+                " not representible given " + str(self._m) + " bits"
+            raise ValueError
+
+        # just to be safe, should be unnecessary
+        self._value = self._value & self._max_val_d
+
+    def m(self):
+        return self._m
+    def value(self):
+        return self._value
+#+end_src
+
+** __repr__
+#+begin_src python  
+    def __repr__(self):
+        length_of_output = self._m + 2 # two chars for '0b'
+        format_string = '#0' + str(length_of_output) + 'b'
+        return format(self._value, format_string) + " (" + str(self._value) + ")"
+#+end_src
+
+** __getitem__
+#+begin_src python
+    def __getitem__(self, i):
+        if i > self._m - 1:
+            raise ValueError
+        # we want the (self._m - nth) largest bit (vector addressing, rather than intuitive bit ordering)
+        # address = self._m - i - 1
+        address = i
+        mask = 1 << address
+        return (self._value & mask) >> address
+#+end_src
+
+** operations
+#+begin_src python  
+    def __add__(self, y):
+        # TODO: move to decorator
+        #
+        # if enforce_same_size:
+        #    if self._m != y._m:
+        #        print "Addition: size in bits not equal"
+        #        raise ValueError
+        #
+        # end TODO
+
+        return BitVector(self._value ^ y._value, 
+                         self._m)
+
+    def __sub__(self, y):
+        return BitVector(self._value ^ y._value,
+                         self._m)
+
+    def __mul__(self, y):
+        return BitVector((self._value * y._value) % (self._max_val_d + 1),
+                         self._m)
+
+    def hamming_weight(self):
+        weight = 0
+        val = self._value
+        for i in range(self._m):
+            bit = val & 1
+            weight = weight + bit
+            val = val >> 1
+        return weight
+
+def flip_n_bits(bit_vector_a, n_a):
+    if not isinstance(bit_vector_a, BitVector):
+        raise ValueError
+    else:
+        value = bit_vector_a.value()
+        m = bit_vector_a.m()
+        for i in range(n_a):
+            address_of_bit_to_flip = randint(0, m - 1)
+            value = value ^ pow(2, address_of_bit_to_flip)
+        return BitVector(value, m)
+        
+#+end_src
+
+** example driver
+#+begin_src python :tangle examples/bv_main.py
+from bitvector import BitVector, flip_n_bits
+
+if __name__ == "__main__":
+    nbits = 10
+    bv  = BitVector("100", nbits)
+    bv2 = BitVector("ff", nbits)
+    add = bv + bv2
+    mul = bv * bv2
+    print add, mul
+    for i in range(nbits):
+        print "bit", i, ":", mul[i]
+    print add.hamming_weight()
+    print bv
+    print flip_n_bits(bv, 1)
+#+end_src
+
+* BitMatrix
+:PROPERTIES:
+:header-args: :tangle bitmatrix.py
+:END:
+** __init__
+#+begin_src python 
+from bitvector import BitVector
+'''
+example:
+>>> H = BitMatrix([12, 6, 13, 10, 5, 14, 6, 15, 11, 9 , 8 , 4, 2, 1])
+>>> H.print_bits()
+[1 0 0 1 1 0 1 0 1 1 1 1 0 0 0]
+[1 1 0 1 0 1 1 1 1 0 0 0 1 0 0]
+[0 1 1 0 1 0 1 1 1 1 0 0 0 1 0]
+[0 0 1 1 0 1 0 1 1 1 1 0 0 0 1]
+
+>>> print H * BitVector(27, H.m())
+TODO
+'''
+class BitMatrix:
+    def __init__(self,
+                 columns_a,
+                 m_a=None):
+
+        if m_a is not None:
+            self._m = m_a
+        else:
+            largest_value = max(columns_a)
+            self._m = largest_value.bit_length()
+
+        self._n = len(columns_a)
+        
+        # list of column vectors
+        #
+        if isinstance(columns_a, list):
+
+            # presumably if the first column is an integer, the rest will be as well
+            #
+            if isinstance(columns_a[0], int):
+                self._columns = []
+                for column in columns_a:
+                    if column < 0:
+                        raise ValueError
+                    self._columns.insert(len(self._columns),
+                                        BitVector(column, self._m))
+            elif isinstance(columns_a[0], BitVector):
+                self._columns = columns_a
+
+        else:
+            raise NotImplementedError
+    def n(self):
+        return self._n
+    def m(self):
+        return self._m
+#+end_src
+** __getitem__
+#+begin_src python
+
+    # returns a row vector, by 
+    def __getitem__(self, i):
+        val = 0
+        for j in range(self._n):
+            bit_at_row_i_column_j = self._columns[j][i]
+            val = val + (bit_at_row_i_column_j << j)
+        return BitVector(val, self._n)
+#+end_src
+
+
+** __repr__
+#+begin_src python
+    def __repr__(self):
+        values = [str(col._value) for col in self._columns]
+        values_string = "["
+        for i, val in enumerate(values):
+            values_string = values_string + val
+            if i == self._n - 1:
+                values_string = values_string + "]"
+            else:
+                values_string = values_string + ", "
+        
+        return values_string + " (" + str(self._m) + " bits per column)"
+#+end_src
+
+** print_bits, column
+#+begin_src python  
+    def print_bits(self):
+        for i in range(self._m):
+            row = "["
+            for j in range(self._n):
+                row = row + str(self[i][j]) 
+                # add space between bits, unless
+                if j != self._n - 1:
+                    row = row + " "
+            row = row + "]"
+            print row
+
+    def column(self, col_number_a):
+        return self._columns[col_number_a]
+#+end_src
+
+** operations
+#+begin_src python  
+    def transpose(self):
+        cols = []
+        for i in range(self._m):
+            cols.insert(len(cols), self[i])
+        return BitMatrix(cols, self._n)
+
+    def __add__(self, y):
+        pass
+    def __sub__(self, y):
+        pass
+    def __mul__(self, y):
+        if isinstance(y, BitVector):
+            val = 0
+            for row_number in range(self._m):
+                row_product = self[row_number] * y
+                val = val + (row_product._value << row_number) % 2
+            return BitVector(val, self._m)
+        elif isinstance(y, BitMatrix):
+            output_col_list = []
+            for col_number in range(y._n):
+                print self * y.column(col_number)
+                output_col_list.insert(len(output_col_list),
+                                       self * y.column(col_number))
+            return BitMatrix(output_col_list, self._m)
+        else:
+            raise ValueError
+#+end_src
+
+** example driver
+#+begin_src python :tangle examples/bm_main.py
+from bitmatrix import BitMatrix
+from bitvector import BitVector
+
+if __name__ == "__main__":
+    cols = [1, 2, 3, 4, 5, 6, 7]
+    H = BitMatrix(cols)
+    H.print_bits()
+    x = BitVector(3, H.n())
+    H.transpose().print_bits()
+    HtH = H * H.transpose()
+    HtH.print_bits()
+
+#+end_src
+
