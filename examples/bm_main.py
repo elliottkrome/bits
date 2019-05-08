@@ -4,13 +4,12 @@ from bits import BitVector
 if __name__ == "__main__":
     cols = [11, 14, 7, 8, 4, 2, 1]
     m = 4 # 3 bits per column
-    msb_on_top = True
 
-    C = BitMatrix(cols, m, msb_on_top)
+    C = BitMatrix(cols, m)
     print "C:"
     C.print_bits()
 
-    x = BitMatrix([3, 13], m, msb_on_top).transpose()
+    x = BitMatrix([3, 13], m).transpose()
     print "x:", x
     print x, C
     xC = x * C

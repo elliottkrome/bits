@@ -1,10 +1,9 @@
-from random import randint  # for bit-flipping
+import weakref
 
-class BitVector:
+class BitVector(object):
     def __init__(self,
                  value_a,
-                 size_in_bits_a,
-                 msb_top_a=False):
+                 size_in_bits_a):
         if isinstance(value_a, list):
             raise NotImplementedError
         elif isinstance(value_a, str):
@@ -34,7 +33,6 @@ class BitVector:
 
         # just to be safe, should be unnecessary
         self._value = self._value & self._max_val_d
-        self._msb_on_top = msb_top_a
 
     def m(self):
         return self._m
@@ -54,14 +52,24 @@ class BitVector:
             raise ValueError
         # we might want the (self._m - nth) largest bit (vector addressing, 
         #  rather than intuitive bit ordering)
-        if self._msb_on_top:
-            address = self._m - i - 1
-        else:
-            address = i
-        # print "here"
+        address = self._m - i - 1
 
         mask = 1 << address
         return (self._value & mask) >> address
+    def __setitem__(self, i, new_val):
+        if i > self._m - 1:
+            raise ValueError
+        # we might want the (self._m - nth) largest bit (vector addressing, 
+        #  rather than intuitive bit ordering)
+        address = self._m - i - 1
+        mask = 1 << address
+
+        old = self._value        
+        if new_val == 1:
+            self._value = self._value | mask
+        elif new_val == 0:
+            self._value = (1 << self.m()) - 1 - self._value
+            # print "old:", old, "new:", self._value, "<><> bit should now be", new_val
 
     def _assure_dimensions(self, y):
         if y.m() != self.m():
@@ -70,14 +78,12 @@ class BitVector:
     def __add__(self, y):
         self._assure_dimensions(y)
         return BitVector(self._value ^ y._value, 
-                         self._m,
-                         self._msb_on_top)
+                         self._m)
 
     def __sub__(self, y):
         self._assure_dimensions(y)
         return BitVector(self._value ^ y._value,
-                         self._m,
-                         self._msb_on_top)
+                         self._m)
 
     def __mul__(self, y):
         self._assure_dimensions(y)
@@ -96,13 +102,20 @@ class BitVector:
             val = val >> 1
         return weight
 
-def flip_n_bits(bit_vector_a, n_a):
-    if not isinstance(bit_vector_a, BitVector):
-        raise ValueError
-    else:
-        value = bit_vector_a.value()
-        m = bit_vector_a.m()
-        for i in range(n_a):
-            address_of_bit_to_flip = randint(0, m - 1)
-            value = value ^ pow(2, address_of_bit_to_flip)
-        return BitVector(value, m)
+
+# to allow things like this:
+#  H[row][col] = 1
+# to work correctly (these only work)
+class RowBitVector(BitVector):
+    def __init__(self, 
+                 value_a,
+                 size_in_bits_a,
+                 parent_matrix_a,
+                 row_in_parent_matrix_a):
+        self._parent_matrix = parent_matrix_a #weakref.ref(parent_matrix_a)
+        self._row_in_parent_matrix = row_in_parent_matrix_a
+        super(RowBitVector, self).__init__(value_a, size_in_bits_a)
+
+    def __setitem__(self, key, value):
+        self._parent_matrix._columns[self._row_in_parent_matrix][key] = value
+        super(RowBitVector, self).__setitem__(key, value)

@@ -4,10 +4,11 @@ n
 :header-args: :tangle __init__.py
 :END:
 #+begin_src python
-from bitvector import BitVector, flip_n_bits
+from bitvector import BitVector
 from bitmatrix import BitMatrix
+from bitsaux import flip_n_bits, flip_up_to_n_bits
 
-__all__ = ['BitVector', 'BitMatrix', 'flip_n_bits']
+# __all__ = ['BitVector', 'BitMatrix', 'flip_up_to_n_bits', 'flip_n_bits']
 #+end_src
 * BitVector
 :PROPERTIES:
@@ -15,13 +16,12 @@ __all__ = ['BitVector', 'BitMatrix', 'flip_n_bits']
 :END:
 ** imports, __init__, getters
 #+begin_src python 
-from random import randint  # for bit-flipping
+import weakref
 
-class BitVector:
+class BitVector(object):
     def __init__(self,
                  value_a,
-                 size_in_bits_a,
-                 msb_top_a=False):
+                 size_in_bits_a):
         if isinstance(value_a, list):
             raise NotImplementedError
         elif isinstance(value_a, str):
@@ -51,7 +51,6 @@ class BitVector:
 
         # just to be safe, should be unnecessary
         self._value = self._value & self._max_val_d
-        self._msb_on_top = msb_top_a
 
     def m(self):
         return self._m
@@ -70,21 +69,31 @@ class BitVector:
         return output
 #+end_src
 
-** __getitem__
+** __getitem__, __setitem__
 #+begin_src python
     def __getitem__(self, i):
         if i > self._m - 1:
             raise ValueError
         # we might want the (self._m - nth) largest bit (vector addressing, 
         #  rather than intuitive bit ordering)
-        if self._msb_on_top:
-            address = self._m - i - 1
-        else:
-            address = i
-        # print "here"
+        address = self._m - i - 1
 
         mask = 1 << address
         return (self._value & mask) >> address
+    def __setitem__(self, i, new_val):
+        if i > self._m - 1:
+            raise ValueError
+        # we might want the (self._m - nth) largest bit (vector addressing, 
+        #  rather than intuitive bit ordering)
+        address = self._m - i - 1
+        mask = 1 << address
+
+        old = self._value        
+        if new_val == 1:
+            self._value = self._value | mask
+        elif new_val == 0:
+            self._value = (1 << self.m()) - 1 - self._value
+            # print "old:", old, "new:", self._value, "<><> bit should now be", new_val
 #+end_src
 
 ** operations
@@ -96,14 +105,12 @@ class BitVector:
     def __add__(self, y):
         self._assure_dimensions(y)
         return BitVector(self._value ^ y._value, 
-                         self._m,
-                         self._msb_on_top)
+                         self._m)
 
     def __sub__(self, y):
         self._assure_dimensions(y)
         return BitVector(self._value ^ y._value,
-                         self._m,
-                         self._msb_on_top)
+                         self._m)
 
     def __mul__(self, y):
         self._assure_dimensions(y)
@@ -122,19 +129,24 @@ class BitVector:
             val = val >> 1
         return weight
 
-def flip_n_bits(bit_vector_a, n_a):
-    if not isinstance(bit_vector_a, BitVector):
-        raise ValueError
-    else:
-        value = bit_vector_a.value()
-        m = bit_vector_a.m()
-        for i in range(n_a):
-            address_of_bit_to_flip = randint(0, m - 1)
-            value = value ^ pow(2, address_of_bit_to_flip)
-        return BitVector(value, m)
-        
-#+end_src
 
+# to allow things like this:
+#  H[row][col] = 1
+# to work correctly (these only work)
+class RowBitVector(BitVector):
+    def __init__(self, 
+                 value_a,
+                 size_in_bits_a,
+                 parent_matrix_a,
+                 row_in_parent_matrix_a):
+        self._parent_matrix = parent_matrix_a #weakref.ref(parent_matrix_a)
+        self._row_in_parent_matrix = row_in_parent_matrix_a
+        super(RowBitVector, self).__init__(value_a, size_in_bits_a)
+
+    def __setitem__(self, key, value):
+        self._parent_matrix._columns[self._row_in_parent_matrix][key] = value
+        super(RowBitVector, self).__setitem__(key, value)
+#+end_src
 ** example driver
 #+begin_src python :tangle examples/bv_main.py
 from bits import BitVector, flip_n_bits
@@ -159,7 +171,7 @@ if __name__ == "__main__":
 :END:
 ** __init__
 #+begin_src python 
-from bitvector import BitVector
+from bitvector import BitVector, RowBitVector
 '''
 example:
 >>> H = BitMatrix([12, 6, 13, 10, 5, 14, 6, 15, 11, 9 , 8 , 4, 2, 1])
@@ -172,11 +184,10 @@ example:
 >>> print H * BitVector(27, H.m())
 TODO
 '''
-class BitMatrix:
+class BitMatrix(object):
     def __init__(self,
                  columns_a,
-                 m_a=None,
-                 msb_top_a=False):
+                 m_a=None):
 
         if m_a is not None:
             self._m = m_a
@@ -184,7 +195,6 @@ class BitMatrix:
             largest_value = max(columns_a)
             self._m = largest_value.bit_length()
 
-        self._msb_on_top = msb_top_a
         self._n = len(columns_a)
         
         # list of column vectors
@@ -200,17 +210,20 @@ class BitMatrix:
                         raise ValueError
                     self._columns.insert(len(self._columns),
                                         BitVector(column, 
-                                                  self._m,
-                                                  self._msb_on_top))
+                                                  self._m))
             elif isinstance(columns_a[0], BitVector):
                 self._columns = columns_a
 
+        elif isinstance(columns_a, BitMatrix):
+            self._columns = columns_a.columns()
         else:
             raise NotImplementedError
     def n(self):
         return self._n
     def m(self):
         return self._m
+    def columns(self):
+        return self._columns
 #+end_src
 ** __getitem__
 #+begin_src python
@@ -219,13 +232,12 @@ class BitMatrix:
     def __getitem__(self, i):
         val = 0
         for j in range(self._n):
+            # print "asdf", j, i, self._columns[j]
+            
             bit_at_row_i_column_j = self._columns[j][i]
-            if self._msb_on_top:
-                power = self._n - j - 1
-            else:
-                power = j
+            power = self._n - j - 1
             val = val + (bit_at_row_i_column_j << power)
-        return BitVector(val, self._n, self._msb_on_top)
+        return RowBitVector(val, self._n, self, i)
 #+end_src
 
 
@@ -267,7 +279,7 @@ class BitMatrix:
         cols = []
         for i in range(self._m):
             cols.insert(len(cols), self[i])
-        return BitMatrix(cols, self._n, self._msb_on_top)
+        return BitMatrix(cols, self._n)
 
     def __add__(self, y):
         pass
@@ -275,21 +287,22 @@ class BitMatrix:
         pass
     def __mul__(self, y):
         if self.n() != y.m():
+            print "left hand n =", self.n(), "!=", "right hand m = ", y.m()
             raise ValueError
         if isinstance(y, BitVector):
             val = 0
             for row_number in range(self._m):
-                if self._msb_on_top: 
-                    row_number = self._m - row_number - 1
-                row_product = self[row_number] * y
-                val = val + (row_product << row_number)
-            return BitVector(val, self._m, self._msb_on_top)
+                power = row_number
+                _row_number = self._m - row_number - 1
+                row_product = self[_row_number] * y
+                val = val + (row_product << power)
+            return BitVector(val, self._m)
         elif isinstance(y, BitMatrix):
             output_col_list = []
             for col_number in range(y._n):
                 output_col_list.insert(len(output_col_list),
                                        self * y.column(col_number))
-            return BitMatrix(output_col_list, self._m, self._msb_on_top)
+            return BitMatrix(output_col_list, self._m)
         else:
             raise ValueError
 #+end_src
@@ -302,13 +315,12 @@ from bits import BitVector
 if __name__ == "__main__":
     cols = [11, 14, 7, 8, 4, 2, 1]
     m = 4 # 3 bits per column
-    msb_on_top = True
 
-    C = BitMatrix(cols, m, msb_on_top)
+    C = BitMatrix(cols, m)
     print "C:"
     C.print_bits()
 
-    x = BitMatrix([3, 13], m, msb_on_top).transpose()
+    x = BitMatrix([3, 13], m).transpose()
     print "x:", x
     print x, C
     xC = x * C
@@ -319,3 +331,43 @@ if __name__ == "__main__":
     C.transpose().print_bits()
 #+end_src
 
+** auxilary
+#+begin_src python :tangle bitsaux.py
+from bitmatrix import BitMatrix
+from bitvector import BitVector
+
+from random import randint  # for bit-flipping
+
+def flip_n_bits(bits_a, n_a):
+    if isinstance(bits_a, BitVector):
+        st = " "
+        value = bits_a.value()
+        m = bits_a.m()
+        for i in range(n_a):
+            address_of_bit_to_flip = randint(0, m - 1)
+            st = st + str(address_of_bit_to_flip)
+            value = value ^ pow(2, address_of_bit_to_flip)
+
+        return BitVector(value, m), st
+    else:
+        raise TypeError
+
+def flip_up_to_n_bits(bits_a, n_a):
+
+    if isinstance(bits_a, BitVector):
+       n_bits_to_flip = randint(0, n_a)
+       print "flipped", n_bits_to_flip, "bits"
+       return flip_n_bits(bits_a, n_bits_to_flip)
+    elif isinstance(bits_a, BitMatrix):
+        row_vectors = []
+        bits_flipped = []
+        for i in range(bits_a.m()):
+            n_bits_to_flip = randint(0, n_a)
+            perturbed_row, bits_flipped_current_row = flip_n_bits(bits_a[i], n_bits_to_flip)
+            row_vectors.insert(len(row_vectors), perturbed_row)
+            bits_flipped.insert(len(bits_flipped), bits_flipped_current_row)
+        print bits_flipped_current_row
+        return BitMatrix(row_vectors, bits_a.n()).transpose()
+    else:
+        raise ValueError
+#+end_src
