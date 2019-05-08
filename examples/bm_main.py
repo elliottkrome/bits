@@ -18,3 +18,9 @@ if __name__ == "__main__":
 
     print "C':"
     C.transpose().print_bits()
+
+    print "before setting to 0: ", C[0]
+    C[0][0] = 0
+    print "after  setting to 0: ", C[0]
+    C[0][0] = 1
+    print "after  setting to 1: ", C[0]

@@ -69,7 +69,6 @@ class BitVector(object):
             self._value = self._value | mask
         elif new_val == 0:
             self._value = (1 << self.m()) - 1 - self._value
-            # print "old:", old, "new:", self._value, "<><> bit should now be", new_val
 
     def _assure_dimensions(self, y):
         if y.m() != self.m():
